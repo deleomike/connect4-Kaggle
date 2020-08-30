@@ -10,7 +10,7 @@ import gym
 import random
 import matplotlib.pyplot as plt
 from random import choice
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from kaggle_environments import evaluate, make
 
 print("Hello World")
@@ -39,11 +39,6 @@ class ConnectX(gym.Env):
         if random.uniform(0, 1) < self.switch_prob:
             self.switch_trainer()
         res = self.trainer.reset()
-        try:
-            res.board
-        except:
-            print("error")
-
         return res
 
 
@@ -79,7 +74,8 @@ gamma = 0.6
 epsilon = 0.99
 min_epsilon = 0.1
 
-episodes = 10000
+#episodes = 10000
+episodes = 100
 
 alpha_decay_step = 1000
 alpha_decay_rate = 0.9
@@ -101,10 +97,7 @@ for i in tqdm(range(episodes)):
     epochs, total_rewards = 0, 0
     done = False
 
-    counter = 0
     while not done:
-        counter = counter + 1
-        #print(i,counter)
 
         if random.uniform(0, 1) < epsilon:
             action = choice([c for c in range(env.action_space.n) if state['board'][c] == 0])
@@ -152,7 +145,69 @@ for i in tqdm(range(episodes)):
     if (i + 1) % alpha_decay_step == 0:
         alpha *= alpha_decay_rate
 
-len(q_table.table)
+print(len(q_table.table))
+
+
+plt.plot(all_avg_rewards)
+plt.xlabel('Episode')
+plt.ylabel('Avg rewards (100)')
+plt.show()
+
+plt.plot(all_qtable_rows)
+plt.xlabel('Episode')
+plt.ylabel('Explored states')
+plt.show()
+
+plt.plot(all_epsilons)
+plt.xlabel('Episode')
+plt.ylabel('Epsilon')
+plt.show()
+
+
+tmp_dict_q_table = q_table.table.copy()
+dict_q_table = dict()
+
+for k in tmp_dict_q_table:
+    if np.count_nonzero(tmp_dict_q_table[k]) > 0:
+        dict_q_table[k] = int(np.argmax(tmp_dict_q_table[k]))
+
+my_agent = '''def my_agent(observation, configuration):
+    from random import choice
+
+    q_table = ''' \
+    + str(dict_q_table).replace(' ', '') \
+    + '''
+
+    board = observation.board[:]
+    board.append(observation.mark)
+    state_key = list(map(str, board))
+    state_key = hex(int(''.join(state_key), 3))[2:]
+
+    if state_key not in q_table.keys():
+        return choice([c for c in range(configuration.columns) if observation.board[c] == 0])
+
+    action = q_table[state_key]
+
+    if observation.board[action] != 0:
+        return choice([c for c in range(configuration.columns) if observation.board[c] == 0])
+
+    return action
+    '''
+
+print("Writing Agent")
+with open('submission.py', 'w') as f:
+    f.write(my_agent)
+
+print("Evaluating Agent")
+
+from submission import my_agent
+
+def mean_reward(rewards):
+    return sum(r[0] for r in rewards) / sum(r[0] + r[1] for r in rewards)
+
+# Run multiple episodes to estimate agent's performance.
+print("My Agent vs Random Agent:", mean_reward(evaluate("connectx", [my_agent, "random"], num_episodes=10)))
+print("My Agent vs Negamax Agent:", mean_reward(evaluate("connectx", [my_agent, "negamax"], num_episodes=10)))
 
 # You can write up to 5GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using "Save & Run All"
 # You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session
